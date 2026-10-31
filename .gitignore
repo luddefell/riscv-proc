@@ -1,0 +1,27 @@
+# Simulation
+sim_build/
+obj_dir/
+*.vcd
+*.fst
+results.xml
+__pycache__/
+.venv/
+
+# Software builds
+sw/build/
+*.elf
+*.o
+
+# Quartus
+fpga/db/
+fpga/incremental_db/
+fpga/output_files/
+fpga/*.qws
+fpga/*.rpt
+fpga/*.summary
+
+.DS_Store
+
+# Generated
+build/
+.mypy_cache/
