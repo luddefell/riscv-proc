@@ -3,7 +3,7 @@ PY      := ../.venv/bin/python
 IMPL    ?= alt
 K       ?=
 
-.PHONY: help setup test ubmark ubmark-delays compare waves net-route net-router net-mesh net clean
+.PHONY: help setup test ubmark ubmark-delays compare waves net-route net-router net-mesh net cachenet mcdcache mcore clean
 
 help:
 	@echo "make setup          Python venv in ../.venv (once; Verilator installed separately)"
@@ -16,6 +16,9 @@ help:
 	@echo "make net-router     one mesh router: random traffic, with and without stalls"
 	@echo "make net-mesh       2x2 mesh: random traffic + latency vs. injection sweep"
 	@echo "make net            all three, smallest first"
+	@echo "make cachenet       CacheNet: random traffic, 4 procs <-> 4 banks"
+	@echo "make mcdcache       MultiCoreDataCache: 4 cores' loads/stores vs. a reference memory"
+	@echo "make mcore          MultiCoreSys: multicore tests + 214 ISA tests on all 4 cores (K='mcore_.*')"
 
 setup:
 	/opt/homebrew/bin/python3.10 -m venv ../.venv
@@ -49,6 +52,15 @@ net-mesh:
 	$(PY) tb/run.py mesh
 
 net: net-route net-router net-mesh
+
+cachenet:
+	$(PY) tb/run.py cachenet
+
+mcdcache:
+	$(PY) tb/run.py mcdcache
+
+mcore:
+	$(PY) tb/run.py mcore $(if $(K),-k '$(K)')
 
 clean:
 	rm -rf build

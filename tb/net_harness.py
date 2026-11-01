@@ -43,15 +43,15 @@ def xy_port(router_id, dest, width=2):
     return PORT_L
 
 
-def get_slice(vec, i):
-    return (vec >> (i * MSG_NBITS)) & ((1 << MSG_NBITS) - 1)
+def get_slice(vec, i, nbits=MSG_NBITS):
+    return (vec >> (i * nbits)) & ((1 << nbits) - 1)
 
 
 class Source:
     """Drives n val/rdy ports from per-port queues, with optional random gaps."""
 
-    def __init__(self, val, rdy, msg, n, max_gap=0):
-        self.val, self.rdy, self.msg, self.n = val, rdy, msg, n
+    def __init__(self, val, rdy, msg, n, max_gap=0, nbits=MSG_NBITS):
+        self.val, self.rdy, self.msg, self.n, self.nbits = val, rdy, msg, n, nbits
         self.queues = [deque() for _ in range(n)]
         self.max_gap = max_gap
         self.gap = [0] * n
@@ -65,7 +65,7 @@ class Source:
             await FallingEdge(clk)
             sending = [bool(self.queues[i]) and self.gap[i] == 0 for i in range(self.n)]
             self.val.value = sum(1 << i for i in range(self.n) if sending[i])
-            self.msg.value = sum(self.queues[i][0] << (i * MSG_NBITS) for i in range(self.n) if sending[i])
+            self.msg.value = sum(self.queues[i][0] << (i * self.nbits) for i in range(self.n) if sending[i])
 
             await ReadOnly()
             rdy = int(self.rdy.value)
@@ -85,8 +85,8 @@ class Source:
 class Sink:
     """Accepts n val/rdy ports, with rdy dropped at random (stall_prob)."""
 
-    def __init__(self, val, rdy, msg, n, stall_prob=0.0):
-        self.val, self.rdy, self.msg, self.n = val, rdy, msg, n
+    def __init__(self, val, rdy, msg, n, stall_prob=0.0, nbits=MSG_NBITS):
+        self.val, self.rdy, self.msg, self.n, self.nbits = val, rdy, msg, n, nbits
         self.stall_prob = stall_prob
         self.on_recv = None
 
@@ -98,7 +98,7 @@ class Sink:
 
             await ReadOnly()
             val, msg = int(self.val.value), int(self.msg.value)
-            got = [(i, get_slice(msg, i)) for i in range(self.n) if ready[i] and (val >> i) & 1]
+            got = [(i, get_slice(msg, i, self.nbits)) for i in range(self.n) if ready[i] and (val >> i) & 1]
 
             await RisingEdge(clk)
             for i, m in got:

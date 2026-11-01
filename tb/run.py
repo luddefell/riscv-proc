@@ -10,6 +10,10 @@
   python tb/run.py route                  # mesh route unit, all 16 cases
   python tb/run.py router                 # one mesh router, random traffic
   python tb/run.py mesh                   # 2x2 mesh: random traffic + latency sweep
+  python tb/run.py cachenet               # CacheNet: 4 procs <-> 4 banks over two meshes
+  python tb/run.py mcdcache               # MultiCoreDataCache: 4 cores, banks, main memory
+  python tb/run.py mcore                  # MultiCoreSys: mcore tests + all ISA tests on 4 cores
+  python tb/run.py mcore -k 'mcore_.*'    # only the multicore-specific tests
 """
 
 import argparse
@@ -38,6 +42,9 @@ NET = {
     "route": (RTL / "net/MeshRouteUnit.v", "net_MeshRouteUnit", "test_net_route"),
     "router": (RTL / "net/MeshRouter.v", "net_MeshRouter", "test_net_router"),
     "mesh": (RTL / "net/Mesh.v", "net_Mesh", "test_net_mesh"),
+    "cachenet": (RTL / "sys/CacheNet.v", "sys_CacheNet", "test_sys_cachenet"),
+    "mcdcache": (RTL / "sys/MultiCoreDataCache.v", "sys_MultiCoreDataCache", "test_sys_mcdcache"),
+    "mcore": (RTL / "sys/MultiCoreSys.v", "sys_MultiCoreSys", "test_sys_mcore"),
 }
 
 # The course code is lint-clean under the course's Verilator flags, not -Wall.
