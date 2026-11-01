@@ -3,7 +3,7 @@ PY      := ../.venv/bin/python
 IMPL    ?= alt
 K       ?=
 
-.PHONY: help setup test ubmark ubmark-delays compare waves clean
+.PHONY: help setup test ubmark ubmark-delays compare waves net-route net-router net-mesh net clean
 
 help:
 	@echo "make setup          Python venv in ../.venv (once; Verilator installed separately)"
@@ -12,6 +12,10 @@ help:
 	@echo "make ubmark-delays  same, with random memory stalls"
 	@echo "make compare        ubmark CPI for base vs alt vs bht"
 	@echo "make waves K=add_basic   FST waveform in build/\$$IMPL/ (open with gtkwave or Surfer)"
+	@echo "make net-route      mesh route unit: all 16 (router, dest) cases"
+	@echo "make net-router     one mesh router: random traffic, with and without stalls"
+	@echo "make net-mesh       2x2 mesh: random traffic + latency vs. injection sweep"
+	@echo "make net            all three, smallest first"
 
 setup:
 	/opt/homebrew/bin/python3.10 -m venv ../.venv
@@ -34,6 +38,17 @@ compare:
 
 waves:
 	$(PY) tb/run.py isa --impl $(IMPL) -k '$(K)' --waves
+
+net-route:
+	$(PY) tb/run.py route
+
+net-router:
+	$(PY) tb/run.py router
+
+net-mesh:
+	$(PY) tb/run.py mesh
+
+net: net-route net-router net-mesh
 
 clean:
 	rm -rf build

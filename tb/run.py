@@ -7,6 +7,9 @@
   python tb/run.py ubmark --impl bht      # microbenchmarks + CPI table
   python tb/run.py ubmark --mem-delays    # with random memory stalls
   python tb/run.py isa -k add_basic --waves   # dump build/<impl>/dump.fst
+  python tb/run.py route                  # mesh route unit, all 16 cases
+  python tb/run.py router                 # one mesh router, random traffic
+  python tb/run.py mesh                   # 2x2 mesh: random traffic + latency sweep
 """
 
 import argparse
@@ -30,15 +33,27 @@ PROCS = {
     "bht": (RTL / "proc/ProcBHT.v", "proc_ProcBHT"),
 }
 
+# Network suites: (source file, top module, cocotb test module)
+NET = {
+    "route": (RTL / "net/MeshRouteUnit.v", "net_MeshRouteUnit", "test_net_route"),
+    "router": (RTL / "net/MeshRouter.v", "net_MeshRouter", "test_net_router"),
+    "mesh": (RTL / "net/Mesh.v", "net_Mesh", "test_net_mesh"),
+}
+
 # The course code is lint-clean under the course's Verilator flags, not -Wall.
 VERILATOR_ARGS = ["-Wno-fatal", "-Wno-lint", "-Wno-style", "-Wno-TIMESCALEMOD", "-Wno-MULTIDRIVEN"]
 
 
-def build_and_test(source, top, build_dir, test_module, test_filter=None, waves=False, extra_env=None):
+def build_and_test(source, top, build_dir, test_module, test_filter=None, waves=False, extra_env=None,
+                   extra_includes=()):
+    # Verilator's makefile calls `python3`; make it the venv's so it matches the runner's PYTHONPATH.
+    venv_bin = str(Path(sys.executable).parent)
+    if not os.environ["PATH"].startswith(venv_bin):
+        os.environ["PATH"] = venv_bin + os.pathsep + os.environ["PATH"]
     runner = get_runner("verilator")
     runner.build(
         sources=[source],
-        includes=[RTL, LABS],
+        includes=[*extra_includes, RTL, LABS],
         hdl_toplevel=top,
         build_args=VERILATOR_ARGS + (["--trace-fst", "--trace-structs"] if waves else []),
         build_dir=build_dir,
@@ -63,12 +78,27 @@ def build_and_test(source, top, build_dir, test_module, test_filter=None, waves=
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("suite", choices=["isa", "ubmark"])
+    p.add_argument("suite", choices=["isa", "ubmark", *NET])
     p.add_argument("--impl", choices=list(PROCS), default="alt")
     p.add_argument("-k", "--filter", help="regex on the test case name, e.g. 'mul_.*'")
     p.add_argument("--mem-delays", action="store_true", help="ubmark: random memory stalls + 3 extra cycles")
     p.add_argument("--waves", action="store_true", help="dump an FST waveform")
     args = p.parse_args()
+
+    if args.suite in NET:
+        source, top, module = NET[args.suite]
+        results_file = ROOT / "build" / f"net-{args.suite}.json"
+        num_tests, num_failed = build_and_test(
+            source, top, ROOT / "build" / f"net-{args.suite}", module,
+            test_filter=args.filter, waves=args.waves,
+            extra_env={"RESULTS_FILE": str(results_file)},
+        )
+        if args.suite == "mesh" and results_file.exists():
+            print(f"\n{'injection':>10}{'latency':>10}{'throughput':>12}")
+            for r in json.loads(results_file.read_text()):
+                print(f"{r['rate']:>10.2f}{r['avg_latency']:>10.2f}{r['throughput']:>12.3f}")
+        print(f"\n{num_tests - num_failed}/{num_tests} passed")
+        return 1 if num_failed or num_tests == 0 else 0
 
     source, top = PROCS[args.impl]
     results_file = ROOT / "build" / f"ubmark-{args.impl}{'-delays' if args.mem_delays else ''}.json"
