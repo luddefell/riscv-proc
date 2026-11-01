@@ -10,6 +10,7 @@
 `include "vc/muxes.v"
 `include "vc/regs.v"
 `include "vc/regfiles.v"
+`include "proc/BranchHistoryTable.v"
 
 `include "lab2_proc/tinyrv2_encoding.v"
 `include "lab2_proc/ProcDpathImmGen.v"
@@ -44,7 +45,7 @@ module proc_ProcBHTDpath
   input  logic         imem_respstream_drop,
 
   input  logic         reg_en_F,
-  input  logic [1:0]   pc_sel_F,
+  input  logic [2:0]   pc_sel_F,
 
   input  logic         reg_en_D,
   input  logic [2:0]   op1_sel_D,
@@ -68,6 +69,9 @@ module proc_ProcBHTDpath
   input  logic         imul_resp_rdy_X,
   input  logic [1:0]   ex_result_sel_X,
 
+  input  logic         bht_update_en_X,
+  input  logic         bht_update_taken_X,
+
   // status signals (dpath->ctrl)
 
   output logic [31:0]  inst_D,
@@ -77,6 +81,8 @@ module proc_ProcBHTDpath
 
   output               logic imul_req_rdy_D, // for imul
   output               logic imul_resp_val_X,
+
+  output logic         bht_pred_taken_D,
 
   // extra ports
 
@@ -116,13 +122,13 @@ module proc_ProcBHTDpath
     .out  (pc_plus4_F)
   );
 
-  // TODO BHT: one more next-PC source
-  vc_Mux4#(32) pc_sel_mux_F
+  vc_Mux5#(32) pc_sel_mux_F
   (
     .in0  (pc_plus4_F),
     .in1  (br_target_X),
     .in2  (jal_target_D),
     .in3  (jalr_target_X),
+    .in4  (pc_plus4_X),
     .sel  (pc_sel_F),
     .out  (pc_next_F)
   );
@@ -256,6 +262,9 @@ module proc_ProcBHTDpath
     .sel  (sw_data_sel_D),
     .out  (sw_data_D)
   );
+
+
+
 
   //--------------------------------------------------------------------
   // X stage
@@ -436,6 +445,21 @@ module proc_ProcBHTDpath
    .en     (stats_en_wen_W),
    .d      (wb_result_W),
    .q      (stats_en_W)
+  );
+
+  //--------------------------------------------------------------------
+  // BHT
+  //--------------------------------------------------------------------
+
+  proc_BranchHistoryTable bht
+  (
+    .clk          (clk),
+    .reset        (reset),
+    .pc_d         (pc_D),
+    .pc_x         (pc_X),
+    .update_en    (bht_update_en_X),
+    .update_taken (bht_update_taken_X),
+    .pred_taken_d (bht_pred_taken_D)
   );
 
 endmodule

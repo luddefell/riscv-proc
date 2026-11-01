@@ -41,7 +41,7 @@ module proc_ProcBHTCtrl
   // control signals (ctrl->dpath)
 
   output logic        reg_en_F,
-  output logic [1:0]  pc_sel_F,
+  output logic [2:0]  pc_sel_F,
 
   output logic        reg_en_D,
   output logic [2:0]  op1_sel_D,
@@ -65,7 +65,10 @@ module proc_ProcBHTCtrl
   output logic        imul_req_val_D, // for imul
   output logic        imul_resp_rdy_X,  
   output logic [1:0]  ex_result_sel_X,
-    
+
+  output logic        bht_update_en_X,
+  output logic        bht_update_taken_X,
+
   // status signals (dpath->ctrl)
 
   input  logic [31:0] inst_D,
@@ -75,6 +78,8 @@ module proc_ProcBHTCtrl
 
   input               logic imul_req_rdy_D,
   input               logic imul_resp_val_X,
+
+  input  logic        bht_pred_taken_D,
 
   // extra ports
 
@@ -171,11 +176,10 @@ module proc_ProcBHTCtrl
 
   logic       pc_redirect_X;
   logic       pc_redirect_D;
-  logic [1:0] pc_sel_X;
-  logic [1:0] pc_sel_D;
+  logic [2:0] pc_sel_X;
+  logic [2:0] pc_sel_D;
 
   // PC select logic
-  // TODO BHT: a mispredicted-taken branch needs a target that does not exist yet
 
   always_comb begin
     if ( pc_redirect_X )   // If a branch is taken in X stage
@@ -249,16 +253,23 @@ module proc_ProcBHTCtrl
   );
 
   // branch logic, redirect PC in F if branch is taken in D
-  // TODO BHT: predict conditional branches here
+
+  logic is_cond_br_D;
+  assign is_cond_br_D = ( br_type_D == br_bne ) || ( br_type_D == br_beq )
+                     || ( br_type_D == br_lt  ) || ( br_type_D == br_ltu );
 
   always_comb begin
     if ( val_D && ( br_type_D == br_j) ) begin
       pc_redirect_D = 1'b1;
-      pc_sel_D      = 2'd2; // use branch target
+      pc_sel_D      = 3'd2; // use branch target
+    end
+    else if ( val_D && is_cond_br_D && bht_pred_taken_D ) begin
+      pc_redirect_D = 1'b1;
+      pc_sel_D      = 3'd2; // predicted taken: jal_target_D holds pc_D + imm_b
     end
     else begin
       pc_redirect_D = 1'b0;
-      pc_sel_D      = 2'b0; // use pc+4
+      pc_sel_D      = 3'b0; // use pc+4
     end
   end
 
@@ -541,10 +552,10 @@ module proc_ProcBHTCtrl
 
   assign ostall_D = val_D && ( ostall_mngr2proc_D ||  oimul_stall_D || ostall_load_use_rs1_D || ostall_load_use_rs2_D ) ; // removed hazard stall 
 
-  // osquash due to jump instruction in D stage (not implemented yet)
-  // TODO BHT: predicted-taken branches also squash from D
+  // osquash due to jump or predicted-taken branch in D stage
 
-  assign osquash_D = val_D && !stall_D && (br_type_D == br_j);
+  assign osquash_D = val_D && !stall_D
+                  && ( (br_type_D == br_j) || (is_cond_br_D && bht_pred_taken_D) );
 
   // stall and squash in D
 
@@ -614,6 +625,7 @@ module proc_ProcBHTCtrl
   logic        proc2mngr_val_X;
   logic        stats_en_wen_X;
   logic [2:0]  br_type_X;
+  logic        pred_taken_X;
   logic        is_mul_X;
 
   // Pipeline registers
@@ -633,40 +645,49 @@ module proc_ProcBHTCtrl
       wb_result_sel_X <= wb_result_sel_D;
       stats_en_wen_X  <= stats_en_wen_D;
       br_type_X       <= br_type_D;
-      // TODO BHT: what does X need to know about the prediction made in D?
+      pred_taken_X    <= bht_pred_taken_D;
       is_mul_X        <= is_mul_D;
       ex_result_sel_X <= ex_result_sel_D;
     end
 
-  // branch logic, redirect PC in F if branch is taken
-  // TODO BHT: redirect on a mispredict, not just a taken branch; train the BHT
+  // branch logic, redirect PC in F on a mispredicted branch or a jalr
+
+  logic is_cond_br_X;
+  logic taken_X;
 
   always_comb begin
-  if ( val_X && ( br_type_X == br_bne ) ) begin
-    pc_redirect_X = !br_cond_eq_X;
-    pc_sel_X      = 2'd1;
+    is_cond_br_X = 1'b1;
+    case ( br_type_X )
+      br_bne:  taken_X = !br_cond_eq_X;
+      br_beq:  taken_X =  br_cond_eq_X;
+      br_lt:   taken_X =  br_cond_lt_X;
+      br_ltu:  taken_X =  br_cond_ltu_X;
+      default: begin
+        taken_X      = 1'b0;
+        is_cond_br_X = 1'b0;
+      end
+    endcase
   end
-  else if ( val_X && ( br_type_X == br_beq ) ) begin
-    pc_redirect_X = br_cond_eq_X;
-    pc_sel_X      = 2'd1;
+
+  always_comb begin
+    if ( val_X && is_cond_br_X ) begin
+      pc_redirect_X = ( taken_X != pred_taken_X );
+      pc_sel_X      = taken_X ? 3'd1 : 3'd4; // br_target_X : pc_plus4_X
+    end
+    else if ( val_X && ( br_type_X == br_jalr ) ) begin
+      pc_redirect_X = 1'b1;
+      pc_sel_X      = 3'd3;
+    end
+    else begin
+      pc_redirect_X = 1'b0;
+      pc_sel_X      = 3'b0;
+    end
   end
-  else if ( val_X && ( br_type_X == br_lt ) ) begin
-    pc_redirect_X = br_cond_lt_X;
-    pc_sel_X      = 2'd1;
-  end
-  else if ( val_X && ( br_type_X == br_ltu ) ) begin
-    pc_redirect_X = br_cond_ltu_X;
-    pc_sel_X      = 2'd1;
-  end
-  else if ( val_X && ( br_type_X == br_jalr ) ) begin
-    pc_redirect_X = 1'b1;
-    pc_sel_X      = 2'd3;
-  end
-  else begin
-    pc_redirect_X = 1'b0;
-    pc_sel_X      = 2'b0;
-  end
-end
+
+  // train the BHT once per resolved branch
+
+  assign bht_update_en_X    = val_X && is_cond_br_X && !stall_X;
+  assign bht_update_taken_X = taken_X;
 
   // ostall due to dmem_reqstream not ready.
   logic oimul_stall_X;

@@ -45,6 +45,10 @@ def build_and_test(source, top, build_dir, test_module, test_filter=None, waves=
         waves=waves,
         timescale=("1ns", "1ps"),
     )
+    # The runner hands its own sys.path to the simulator as PYTHONPATH.
+    for path in (str(ROOT / "tb"), str(LABS)):
+        if path not in sys.path:
+            sys.path.insert(0, path)
     results_xml = runner.test(
         test_module=test_module,
         hdl_toplevel=top,
@@ -52,7 +56,7 @@ def build_and_test(source, top, build_dir, test_module, test_filter=None, waves=
         build_dir=build_dir,
         test_filter=test_filter,
         waves=waves,
-        extra_env={"PYTHONPATH": os.pathsep.join([str(ROOT / "tb"), str(LABS)]), **(extra_env or {})},
+        extra_env=extra_env or {},
     )
     return get_results(results_xml)
 
@@ -73,7 +77,7 @@ def main():
 
     num_tests, num_failed = build_and_test(
         source, top, ROOT / "build" / args.impl, "test_proc",
-        test_filter=rf"{args.suite}/\w+=({args.filter or '.*'})$",
+        test_filter=rf"\.{args.suite}_({args.filter or '.*'})$",
         waves=args.waves,
         extra_env={"RESULTS_FILE": str(results_file), "MEM_DELAYS": "1" if args.mem_delays else "0"},
     )

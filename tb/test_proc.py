@@ -7,6 +7,7 @@ ubmark: the lab2 microbenchmarks, verified against their reference output,
 
 import json
 import os
+import random
 
 import cocotb
 
@@ -30,15 +31,25 @@ UBMARKS = {
 }
 
 
-@cocotb.test()
-@cocotb.parametrize(case=list(CASES))
-async def isa(dut, case):
-    gen, delays = CASES[case]
-    await run_program(dut, assemble(gen()), delays=delays)
+def _register(test_name, func):
+    # One named test per case; cocotb.parametrize numbers long string values instead.
+    func.__name__ = func.__qualname__ = test_name
+    globals()[test_name] = cocotb.test()(func)
 
 
-@cocotb.test()
-@cocotb.parametrize(name=list(UBMARKS))
+def _isa_test(gen, delays):
+    async def test(dut):
+        random.seed(0xDEADBEEF)  # same as the course conftest: gen_random_test is deterministic
+        await run_program(dut, assemble(gen()), delays=delays)
+    return test
+
+
+def _ubmark_test(name):
+    async def test(dut):
+        await ubmark(dut, name)
+    return test
+
+
 async def ubmark(dut, name):
     bench = UBMARKS[name]
     mem_delays = os.environ.get("MEM_DELAYS") == "1"
@@ -56,3 +67,10 @@ async def ubmark(dut, name):
         results[name] = {"cycles": cycles, "insts": insts, "cpi": round(cpi, 3)}
         with open(results_file, "w") as f:
             json.dump(results, f, indent=2)
+
+
+for _name, (_gen, _delays) in CASES.items():
+    _register(f"isa_{_name}", _isa_test(_gen, _delays))
+
+for _name in UBMARKS:
+    _register(f"ubmark_{_name.replace('-', '_')}", _ubmark_test(_name))

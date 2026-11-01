@@ -71,7 +71,7 @@ module proc_ProcBHT
   // Instruction Memory Request Bypass Queue
   //----------------------------------------------------------------------
 
-  logic [1:0]  imem_queue_num_free_entries;
+  logic [2:0]  imem_queue_num_free_entries;
   mem_req_4B_t imem_reqstream_enq_msg;
   logic        imem_reqstream_enq_val;
   logic        imem_reqstream_enq_rdy;
@@ -84,7 +84,9 @@ module proc_ProcBHT
   assign imem_reqstream_enq_msg.len    = 2'd0;
   assign imem_reqstream_enq_msg.data   = 32'bx;
 
-  vc_Queue#(`VC_QUEUE_BYPASS,$bits(mem_req_4B_t),2) imem_queue
+  // a D squash then an X squash can leave 3 fetches waiting (ProcAlt: 2)
+
+  vc_Queue#(`VC_QUEUE_BYPASS,$bits(mem_req_4B_t),4) imem_queue
   (
     .clk     (clk),
     .reset   (reset),
@@ -193,7 +195,7 @@ module proc_ProcBHT
   // control signals (ctrl->dpath)
 
   logic        reg_en_F;
-  logic [1:0]  pc_sel_F;
+  logic [2:0]  pc_sel_F;
 
   logic        reg_en_D;
   logic [2:0]  op1_sel_D;
@@ -208,6 +210,8 @@ module proc_ProcBHT
   logic [3:0]  alu_fn_X;
   logic        imul_resp_rdy_X;
   logic [1:0]  ex_result_sel_X;
+  logic        bht_update_en_X;
+  logic        bht_update_taken_X;
 
   logic        reg_en_M;
   logic        wb_result_sel_M;
@@ -225,6 +229,7 @@ module proc_ProcBHT
   logic        br_cond_eq_X;
   logic        br_cond_lt_X;
   logic        br_cond_ltu_X;
+  logic        bht_pred_taken_D;
 
   // dmem write data
   logic [31:0] dmem_reqstream_msg_data;
