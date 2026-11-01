@@ -44,3 +44,13 @@ Delving deeper into comp arch one step at a time, fu avneb 2eqha yh4r y.
 - stateless adapters (also only one design)
 - same network for both (cache and memroy traffic)
 - AI was used for plumbing, learning, intial testing
+
+
+## Future Steps
+- Full RISC-V compliance
+- PyUVM verification
+- Synthesis on Cyclone V
+- C benchmarking
+- Novel additions
+- A compiler???
+- contribute to the open-source
