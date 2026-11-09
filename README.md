@@ -52,5 +52,6 @@ Delving deeper into comp arch one step at a time, fu avneb 2eqha yh4r y.
 - Synthesis on Cyclone V
 - C benchmarking
 - Novel additions
+  - Measuring, in real RTL, what each x86-compatibility assist costs RISC-V.
 - A compiler???
 - contribute to the open-source
